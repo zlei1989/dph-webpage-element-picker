@@ -1,0 +1,4 @@
+node_modules/
+.DS_Store
+*.log
+resources/test/result.json
