@@ -14,15 +14,40 @@ DSH（DeepSeek Harness）动态插件：在对话输入框工具行提供一个�
 
 ## 安装
 
-适用对象：DSH（本仓库部署形态）的 `cordis` 预设会话。需要机器有 **Node.js（含 npm）**、到 npm 源的网络，以及系统已安装 **Chrome / Edge / Chromium / Brave / Opera 之一**（Windows）。
+适用对象：DSH（本仓库部署形态）的 `web` profile。需要机器有 **Node.js（含 npm）**、到 npm 源的网络，以及系统已安装 **Chrome / Edge / Chromium / Brave / Opera 之一**（Windows）。
 
-1. 放置 `resources/`（四个文件：`bootstrap.cjs`、`helper-playwright.js`、`inspector.js`、`browser-probe.cjs`）。插件按以下顺序自动查找，命中即用，无需改代码：
-   - `~/.dsh/_dsh-webpage-element-picker/`（DSH 家目录，默认）
-   - `<DSH 工作区>/_dsh-webpage-element-picker/`（兜底）
-2. 打开 DSH 网页 GUI，新建 `cordis` 预设会话。
-3. 运行 `node scripts/build-install-prompt.mjs` 生成 `install-prompt.md`（或直接使用仓库里的版本），把整段内容发给该会话的 agent。
-4. agent 会执行 `cordis_define` + `cordis_run`；在审批卡上点允许。
-5. 输入框工具行出现十字图标即安装完成。
+### 构建
+
+本仓库是 TypeScript 源码 + tsup 构建的组合包（`lib/` 为构建产物，不入库，克隆后需先构建）：
+
+```sh
+pnpm install
+pnpm build        # tsup：src/host → lib/index.js（ESM），src/client → lib/client.js（loader 包裹）
+```
+
+`pnpm watch` 可持续构建；`pnpm test` 跑 `tsc --noEmit` 类型检查。
+
+### 长期安装：bundle + profile
+
+本仓库是符合 DSH **组合包（bundle）** 格式的 npm 包：
+
+- `package.json` 声明 `dsh.bundle`（`cordis.patch.yml` 配置层）与 `dsh.client`（浏览器半 `exports["./client"]`）；
+- host 半 `src/host/index.ts`（构建为 `lib/index.js`）是原生 Cordis 插件，`inject` 声明的七个服务就绪后才运行；client 半 `src/client/index.ts`（构建为 `lib/client.js`，`window.__ModuleLoader__.load` 工厂，唯一外部依赖 `react`）；
+- `cordis.patch.yml` 插入一行 `name: dsh-webpage-element-picker`，同一行同时被 Loader（host 半）和 client-modules 扫描（浏览器半）使用。
+
+在插件 checkout 内执行（`dsh` CLI 与 pnpm 需在 PATH 上）：
+
+```sh
+pnpm install && pnpm build   # 首次，或修改 src/ 后
+pnpm dsh plugin --profile web add .
+```
+
+首次执行会自动初始化 `web` profile（若缺失）并把本包加入 `$DSH_HOME/profiles/web` 的 `dsh.profile.bundles` 层栈（`dsh plugin` 检测到 `dsh.bundle` 声明后自动追加）。随后**重启** `dsh web` 进程，输入框工具行即出现十字图标。
+
+- 验证层已生效：`pnpm dsh --profile web --dump-config` 应出现 `# == dsh-webpage-element-picker` 层与 `webpage-element-picker` 行。
+- 卸载：`pnpm dsh plugin --profile web remove dsh-webpage-element-picker`。
+- 修改 `src/` 后需重跑 `pnpm build` 再重启 `dsh web`（client-modules 按 bundle rev 缓存，仅 HMR 开发模式可热更）。
+- 无 npm 发布也可分发：`pnpm build && pnpm pack` 出 tarball 后 `pnpm dsh plugin --profile web add ./dsh-webpage-element-picker-<ver>.tgz`。
 
 ## 使用
 
@@ -30,19 +55,27 @@ DSH（DeepSeek Harness）动态插件：在对话输入框工具行提供一个�
 2. 在浏览器页面中点击元素 → 「添加到对话」→ 输入框插入 `[标签][DOMn]`；选择模式随即退出。
 3. 继续输入你的问题（如「把 [提交订单][DOM1] 改成红色」）并发送。
 4. 模型需要细节时自动调用 `read_picked_element` 工具读取完整数据。
-5. 登录场景：页面右下角「选择模式」暂停 → 登录 → 回到对话框点「打开」重新跳转+注入。
+5. 登录场景：页面右下角「选择模式」悬浮按钮（或按 ` 键）暂停 → 登录 → 回到对话框点「仅重新注入」在当前页面恢复选择（如需回到输入的网址则点「打开」重新跳转+注入）。
 
 ## 目录结构
 
 ```
-plugin/
-  host.js        # 插件 Host 半（cordis_define 的 code.host）
-  client.js      # 插件 Client 半（code.client）
-resources/       # 运行时资源（四个文件：bootstrap.cjs / helper-playwright.js / inspector.js / browser-probe.cjs）
-  test/          # 冒烟测试（driver + CSP 测试页 + 窗口可见性检查）
-scripts/
-  build-install-prompt.mjs  # 由 plugin/*.js 生成 install-prompt.md
-install-prompt.md  # 发给 DSH agent 的安装指令
+src/
+  host/
+    index.ts       # Host 半：原生 Cordis 插件（子进程/路由/工具/系统提示），构建为 lib/index.js
+    services.ts    # Host 侧服务接口（subprocess/webServer/fs/tools/…，type-only）
+  client/
+    index.ts       # Client 半：conversation.input.left 十字图标 + 对话框，构建为 lib/client.js
+    services.ts    # Client 侧服务接口（slots/输入框标准 props，type-only）
+    react.ts       # 由注入 require 取得 react 的唯一入口
+    globals.d.ts   # 浏览器 bundle 的运行时全局（require/module/exports）声明
+  shared/
+    types.ts       # host ↔ client 经 HTTP 交换的状态/事件形状（type-only）
+resources/         # 运行时资源（四个文件：bootstrap.cjs / helper-playwright.js / inspector.js / browser-probe.cjs）
+  test/            # 冒烟测试（driver + CSP 测试页 + 窗口可见性检查）
+tsup.config.ts     # 双入口构建：host→ESM，client→CJS+loader 包裹
+tsconfig.json
+cordis.patch.yml   # bundle 配置层：插入 name: dsh-webpage-element-picker 行
 ```
 
 ## 架构
@@ -55,20 +88,20 @@ DSH Host(插件) ──subprocess──▶ node bootstrap.cjs
       │                             └─▶ node helper-playwright.js（playwright-core 驱动系统浏览器）
       │  ▲ 命令长轮询 /dsh-webpage-element-picker/poll                        │
       │  └── 事件 POST  /dsh-webpage-element-picker/events ◀──────────────────┘
-      ├─ systemPrompt.context：DOMn 摘要清单
-      ├─ harness.registerTool：read_picked_element
-      └─ harness.handle：picker-navigate/reinject/status/close/pull
-DSH Client(插件) ── conversation.input.left 图标 ── host.call ──▶ Host
+      ├─ ctx.tools.register：read_picked_element
+      ├─ ctx.systemPrompt.context：DOMn 摘要清单
+      └─ POST /dsh-webpage-element-picker/invoke：picker-navigate/reinject/status/close/pull
+DSH Client(插件) ── conversation.input.left 图标 ── fetch /invoke ──▶ Host
 ```
 
-浏览器与 DSH 之间不依赖进程管道传递数据（Chromium 在 Windows 上会关闭 stdin），命令与事件都走 DSH 自带 HTTP 服务器上的两条路由。
+浏览器与 DSH 之间不依赖进程管道传递数据（Chromium 在 Windows 上会关闭 stdin），命令与事件都走 DSH 自带 HTTP 服务器上的路由：helper 用 `/poll`（长轮询）+ `/events`，浏览器 UI 用 `/invoke`（同源 fetch，复用同一命令队列与应答关联）。
 
 ## 已知限制
 
-- 动态插件存在于会话/进程内：DSH 重启后需重新 define + run（重新执行 install-prompt.md 即可）。
+- bundle 形态跨 DSH 重启持久（`dsh.profile.bundles` 层）。
 - 目标平台为 Windows；需要系统已安装 Chrome/Edge/Chromium/Brave/Opera 之一。原生 Firefox 无法被 Playwright 驱动，不在支持列表；macOS/Linux 未验证。
 - 严格 CSP 页面（`style-src` 禁内联样式）上高亮框的视觉效果会被浏览器拦截，但选择逻辑不受影响。
-- 同一 DSH 进程内多个会话同时运行本插件时，HTTP 路由存在占用冲突（后者注册失败并告警）。
+- 同一 DSH 进程内多个 profile/实例同时运行本插件时，HTTP 路由存在占用冲突（后者注册失败并告警）。
 - 首次打开需要联网安装 playwright-core 运行时（约 13MB，仅一次）；无网络或系统无浏览器时会给出明确报错。
 
 ## License

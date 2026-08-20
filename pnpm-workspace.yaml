@@ -1,0 +1,10 @@
+allowBuilds:
+  '@swc/core': false
+  esbuild: true
+
+# JD 镜像源的 0.28.2 版 @esbuild/win32-x64 二进制不匹配
+# （其 postinstall 会校验版本并失败）。只有 tsx ←
+# postcss-load-config 拉取了 0.28.x，而本包没有 postcss 配置，
+# 因此整棵依赖树固定为 tsup 内置的可用 0.27.7 版本。
+overrides:
+  esbuild: 0.27.7

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'SilentlyContinue'
-# Only count browser processes started by this plugin (command line contains dsh-webpage-element-picker).
-# Keep this file ASCII-only: Windows PowerShell 5.1 reads BOM-less files as ANSI.
+# 仅统计由本插件启动的浏览器进程（命令行包含 dsh-webpage-element-picker）。
+# 本文件保持纯 ASCII：Windows PowerShell 5.1 将无 BOM 的文件按 ANSI 读取。
 $procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe' OR Name='brave.exe' OR Name='opera.exe' OR Name='chromium.exe'" | Where-Object { $_.CommandLine -match 'dsh-webpage-element-picker' }
 $ids = @($procs | Select-Object -ExpandProperty ProcessId)
 if ($ids.Count -eq 0) { Write-Output 'NO-PICKER-BROWSER-PROCESS'; exit }

@@ -1,6 +1,6 @@
 'use strict'
 console.log('DRIVE-START')
-// simulate a user picking #target, then click the injected 添加到对话 button
+// 模拟用户选择 #target，然后点击注入的「添加到对话」按钮
 setTimeout(function () {
   var el = document.getElementById('target')
   console.log('DRIVE-EL-FOUND ' + Boolean(el))

@@ -16,7 +16,7 @@ const payload =
   fs.readFileSync(path.join(root, 'inspector.js'), 'utf8') +
   '\n<<<DSH_END>>>\n'
 
-// ---- mock of the DSH host plugin side: long-poll command queue + event capture
+// ---- 模拟 DSH host 插件侧：长轮询命令队列 + 事件捕获
 const pendingCommands = []
 const pollWaiters = []
 
@@ -127,7 +127,7 @@ server.listen(0, '127.0.0.1', () => {
     fs.writeFileSync(path.join(here, 'result.json'), JSON.stringify(out, null, 2))
   })
 
-  // overall safety: never hang (first-run npx download can take minutes)
+  // 整体安全兜底：永不挂起（首次 npx 下载可能耗时数分钟）
   setTimeout(() => {
     fs.writeFileSync(path.join(here, 'result.json'), JSON.stringify(out, null, 2))
     log('SAFETY dump: helper never became ready, killing tree')

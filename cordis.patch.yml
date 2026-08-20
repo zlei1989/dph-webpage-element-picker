@@ -1,0 +1,14 @@
+# dsh-webpage-element-picker bundle 补丁层。
+#
+# 一行同时服务于包的两半：
+#   - Loader 将包 main（lib/index.js，由 src/host/index.ts 构建）作为
+#     普通 host 插件行导入（subprocess/webServer/tools/systemPrompt/… 服务）；
+#   - web client 模块系统（dsh-client-modules）看到同一行，解析包的
+#     `dsh.client` 声明，并将其 exports["./client"] bundle（lib/client.js，
+#     由 src/client/index.ts 构建）服务到 /plugins/<id>/client.js。
+#
+# 行名必须与包名完全一致：这是 Loader 解析包以及 client-modules 扫描器
+# 查找 package.json 时使用的键。
+- insert:
+    - id: webpage-element-picker
+      name: dsh-webpage-element-picker

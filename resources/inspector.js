@@ -5,17 +5,17 @@
 
   function setStyle(el, s) { for (var k in s) el.style[k] = s[k] }
 
-  /* ---- hover overlay ---- */
+  /* ---- 悬浮高亮覆盖层 ---- */
   var ov = document.createElement('div')
   ov.setAttribute('data-dsh-we', 'ov')
   setStyle(ov, { position: 'fixed', pointerEvents: 'none', zIndex: '2147483640', border: '2px solid #3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: '3px', display: 'none' })
 
-  /* ---- hover label ---- */
+  /* ---- 悬浮标签 ---- */
   var lb = document.createElement('div')
   lb.setAttribute('data-dsh-we', 'lb')
   setStyle(lb, { position: 'fixed', pointerEvents: 'none', zIndex: '2147483640', backgroundColor: '#3b82f6', color: '#fff', fontSize: '11px', fontFamily: 'monospace', padding: '2px 6px', borderRadius: '3px', whiteSpace: 'nowrap', display: 'none' })
 
-  /* ---- action bar ---- */
+  /* ---- 操作栏 ---- */
   var ab = document.createElement('div')
   ab.setAttribute('data-dsh-we', 'ab')
   setStyle(ab, { position: 'fixed', zIndex: '2147483642', background: '#1e1e1e', borderRadius: '6px', display: 'none', flexDirection: 'row', alignItems: 'center', gap: '4px', padding: '4px 6px', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' })
@@ -29,7 +29,7 @@
   ab.appendChild(btnAdd)
   ab.appendChild(btnCancel)
 
-  /* ---- pause/resume chip ---- */
+  /* ---- 暂停/恢复悬浮按钮 ---- */
   var chip = document.createElement('div')
   chip.setAttribute('data-dsh-we', 'chip')
   setStyle(chip, { position: 'fixed', bottom: '16px', right: '16px', zIndex: '2147483642', background: '#1e1e1e', color: '#fff', fontSize: '12px', fontFamily: 'system-ui,sans-serif', borderRadius: '16px', padding: '5px 12px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', userSelect: 'none' })
@@ -46,7 +46,7 @@
   document.documentElement.appendChild(ab)
   document.documentElement.appendChild(chip)
 
-  /* ---- data collection ---- */
+  /* ---- 数据采集 ---- */
   function cSel(el) {
     if (el.id) return '#' + CSS.escape(el.id)
     var ps = [], nd = el
@@ -136,7 +136,7 @@
     return !!(el && el.closest && el.closest('[data-dsh-we]'))
   }
 
-  /* ---- UI helpers ---- */
+  /* ---- UI 辅助函数 ---- */
   function positionAb(rect) {
     var abH = 36, margin = 6
     var top = rect.top + rect.height + margin
@@ -171,7 +171,7 @@
     lb.style.display = 'none'
   }
 
-  /* ---- handlers ---- */
+  /* ---- 事件处理 ---- */
   function onMM(e) {
     if (paused || state !== 'hover') return
     var el = document.elementFromPoint(e.clientX, e.clientY)
@@ -268,7 +268,7 @@
     chip.textContent = '⌖ 选择模式：开启（点击暂停，或按 `）'
   }
 
-  /* ---- buttons ---- */
+  /* ---- 按钮 ---- */
   btnAdd.addEventListener('click', function (e) {
     e.stopPropagation()
     if (!selEl || !selData) return
@@ -284,13 +284,13 @@
     returnToHover()
   })
 
-  /* ---- hover styles for bar buttons ---- */
+  /* ---- 操作栏按钮的悬浮样式 ---- */
   ;[btnAdd, btnCancel].forEach(function (b) {
     b.addEventListener('mouseenter', function () { b.style.background = '#3d3d3d' })
     b.addEventListener('mouseleave', function () { b.style.background = '#2d2d2d' })
   })
 
-  /* ---- first-run toast ---- */
+  /* ---- 首次运行提示 ---- */
   try {
     if (!sessionStorage.getItem('__dsh_we_hint__')) {
       sessionStorage.setItem('__dsh_we_hint__', '1')
@@ -303,7 +303,7 @@
     }
   } catch (err) {}
 
-  /* ---- activation ---- */
+  /* ---- 激活 ---- */
   document.addEventListener('mousemove', onMM, true)
   document.addEventListener('pointerdown', onPD, true)
   document.addEventListener('mouseup', onBlockUp, true)
@@ -312,7 +312,7 @@
   document.addEventListener('keydown', onKD, true)
   document.documentElement.style.cursor = 'crosshair'
 
-  /* ---- exit selection mode: notify the host, then remove everything ---- */
+  /* ---- 退出选择模式：通知 host，然后移除所有元素 ---- */
   function exitMode() {
     try {
       sendData({ action: 'exit-mode', pageUrl: location.href, pageTitle: document.title })
@@ -320,7 +320,7 @@
     cleanupAll()
   }
 
-  /* ---- cleanup ---- */
+  /* ---- 清理 ---- */
   window.__dsh_we_test_state__ = function () { return state }
   function cleanupAll() {
     document.removeEventListener('mousemove', onMM, true)

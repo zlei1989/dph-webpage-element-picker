@@ -1,4 +1,23 @@
+# 依赖
 node_modules/
-.DS_Store
+
+# 构建产物（编译后的 JavaScript；通过 `pnpm build` 重新构建）
+lib/
+
+# TypeScript 增量构建缓存
+*.tsbuildinfo
+
+# Source maps
+*.js.map
+
+# 日志
 *.log
+
+# 打包的 tarball
+*.tgz
+
+# 平台杂项
+.DS_Store
+
+# 冒烟测试产物
 resources/test/result.json
