@@ -1,9 +1,9 @@
 # 安装指令（粘贴给 DSH 会话的 agent）
 
-前置：把本仓库 `resources/` 下的三个文件（bootstrap.cjs、helper-main.js、inspector.js）放到以下任意一个目录（插件按顺序查找，命中即用）：
-  1. `~/.dsh/_dsh-page-picker/`（DSH 家目录，默认）
-  2. `~/.dph/_dsh-page-picker/`
-  3. `<DSH 工作区>/_dsh-page-picker/`（兜底）
+前置：把本仓库 `resources/` 下的四个文件（bootstrap.cjs、helper-playwright.js、inspector.js、browser-probe.cjs）放到以下任意一个目录（插件按顺序查找，命中即用；browser-probe.cjs 负责探测系统已安装浏览器，绝不下载）：
+  1. `~/.dsh/_dsh-webpage-element-picker/`（DSH 家目录，默认）
+  2. `~/.dph/_dsh-webpage-element-picker/`
+  3. `<DSH 工作区>/_dsh-webpage-element-picker/`（兜底）
 
 然后在 DSH 网页 GUI 中新建一个 `cordis` 预设的会话，把下面整段内容发给 agent：
 
@@ -37,8 +37,9 @@ return {
     const waiters = new Map()
     let lastSeq = 0
     let pending = []
-    let status = { state: 'idle', message: '内置浏览器未启动' }
+    let status = { state: 'idle', message: '浏览器未启动' }
     let lineBuf = ''
+    let lastBrowserName = ''
 
     let domCounter = 0
     let domRegistry = []
@@ -81,25 +82,30 @@ return {
       const dirs = []
       const home = await discoverHome()
       if (home) {
-        dirs.push(home + '/.dsh/_dsh-page-picker')
-        dirs.push(home + '/.dph/_dsh-page-picker')
+        dirs.push(home + '/.dsh/_dsh-webpage-element-picker')
+        dirs.push(home + '/.dph/_dsh-webpage-element-picker')
       }
-      dirs.push(workspaceRoot + '/_dsh-page-picker')
+      dirs.push(workspaceRoot + '/_dsh-webpage-element-picker')
       return dirs
     }
 
     const resolveResourceDir = async () => {
       const fs = ctx.get('fs')
       if (fs === undefined) throw new Error('fs 服务不可用')
+      const needFiles = ['bootstrap.cjs', 'helper-playwright.js', 'inspector.js', 'browser-probe.cjs']
       const candidates = await resourceDirCandidates()
       for (const c of candidates) {
-        try {
-          const target = await fs.resolve(c + '/bootstrap.cjs')
-          const info = await fs.stat(target)
-          if (info) return c
-        } catch (err) {}
+        let ok = true
+        for (const name of needFiles) {
+          try {
+            const target = await fs.resolve(c + '/' + name)
+            const info = await fs.stat(target)
+            if (!info) { ok = false; break }
+          } catch (err) { ok = false; break }
+        }
+        if (ok) return c
       }
-      throw new Error('未找到页面元素选择器的资源目录（已尝试: ' + candidates.join(' | ') + '）')
+      throw new Error('未找到页面元素选择器的资源目录（需要 4 个文件: ' + needFiles.join(' / ') + '；已尝试: ' + candidates.join(' | ') + '）')
     }
 
     const loadResources = async (resourceDir) => {
@@ -110,7 +116,7 @@ return {
         return await fs.readText(target)
       }
       return {
-        helper: await readFile('helper-main.js'),
+        helper: await readFile('helper-playwright.js'),
         inspector: await readFile('inspector.js'),
       }
     }
@@ -145,7 +151,7 @@ return {
     if (systemPrompt) {
       try {
         ctx.effect(() => systemPrompt.context({
-          name: 'page-element-picker',
+          name: 'webpage-element-picker',
           order: 60,
           text: () => buildSummary(),
         }))
@@ -198,11 +204,12 @@ return {
         if (pending.length > 100) pending = pending.slice(-100)
         return
       }
-      if (ev.type === 'status') { status = { state: 'open', url: ev.url, title: ev.title }; return }
-      if (ev.type === 'injected') { status = { state: 'open', url: ev.url, title: ev.title, injected: true }; return }
-      if (ev.type === 'mode-exited') { status = { state: 'open', url: ev.url, title: ev.title, modeExited: true }; return }
+      if (ev.type === 'browser') { lastBrowserName = ev.name || '浏览器'; status = { state: 'starting', message: '正在启动 ' + lastBrowserName + '…', browser: lastBrowserName }; return }
+      if (ev.type === 'status') { status = { state: 'open', url: ev.url, title: ev.title, browser: lastBrowserName }; return }
+      if (ev.type === 'injected') { status = { state: 'open', url: ev.url, title: ev.title, injected: true, browser: lastBrowserName }; return }
+      if (ev.type === 'mode-exited') { status = { state: 'open', url: ev.url, title: ev.title, modeExited: true, browser: lastBrowserName }; return }
       if (ev.type === 'window-closed') { status = { state: 'closed', message: '浏览器窗口已关闭，可重新点击打开按钮打开' }; return }
-      if (ev.type === 'helper-ready') { status = { state: 'ready', message: '内置浏览器已就绪' }; return }
+      if (ev.type === 'helper-ready') { status = { state: 'ready', message: '浏览器已就绪' + (lastBrowserName ? '（' + lastBrowserName + '）' : ''), browser: lastBrowserName }; return }
       if (ev.type === 'error') {
         console.error('[page-picker] 浏览器错误: ' + ev.message)
         status = { state: 'error', message: ev.message }
@@ -215,7 +222,7 @@ return {
       try {
         disposers.push(webServer.register({
           kind: 'exact',
-          path: '/dsh-page-picker/poll',
+          path: '/dsh-webpage-element-picker/poll',
           handler: (req, res) => {
             if (commandQueue.length > 0) {
               const cmd = commandQueue.shift()
@@ -245,7 +252,7 @@ return {
         }))
         disposers.push(webServer.register({
           kind: 'exact',
-          path: '/dsh-page-picker/events',
+          path: '/dsh-webpage-element-picker/events',
           handler: (req, res) => {
             let body = ''
             let overflow = false
@@ -317,15 +324,15 @@ return {
           const res = await loadResources(resourceDir)
           const payloadText = res.helper + '\n<<<DSH_SPLIT>>>\n' + res.inspector + '\n<<<DSH_END>>>\n'
           const node = await subprocess.resolveExecutable('node')
-          // npx 启动 Electron（首次自动下载到自有缓存，之后秒开）；
-          // 使用 npx-cli.js 脚本入口而不是 npx.cmd，避免 Windows 下 spawn .cmd 的限制
-          const npxCli = node.replace(/[^\\/]+$/, 'node_modules/npm/bin/npx-cli.js')
+          // npm 安装 playwright-core 运行时（首次数秒，无浏览器下载）后启动系统浏览器；
+          // 使用 npm-cli.js 脚本入口而不是 npm.cmd，避免 Windows 下 spawn .cmd 的限制
+          const npmCli = node.replace(/[^\\/]+$/, 'node_modules/npm/bin/npm-cli.js')
           let launcher = null
           try {
-            await subprocess.resolveExecutable(npxCli)
-            launcher = npxCli
+            await subprocess.resolveExecutable(npmCli)
+            launcher = npmCli
           } catch (err) {}
-          if (!launcher) throw new Error('未找到 npm 的 npx 脚本入口（' + npxCli + '），请确认 Node.js 安装完整')
+          if (!launcher) throw new Error('未找到 npm 的脚本入口（' + npmCli + '），请确认 Node.js 安装完整')
           const port = (typeof webServer.port === 'number' && webServer.port > 0) ? webServer.port : 0
           if (port === 0) throw new Error('DSH web 服务器端口不可用')
           const boot = subprocess.spawn({
@@ -341,10 +348,10 @@ return {
             if (handle === boot) {
               handle = null
               const tail = stderrTail(boot)
-              status = { state: 'closed', message: '内置浏览器进程已退出 (code ' + outcome.exitCode + ')' + (tail ? ' · ' + tail : '') }
+              status = { state: 'closed', message: '浏览器进程已退出 (code ' + outcome.exitCode + ')' + (tail ? ' · ' + tail : '') }
               for (const [id, w] of Array.from(waiters)) {
                 waiters.delete(id)
-                w.reject(new Error('内置浏览器进程已退出'))
+                w.reject(new Error('浏览器进程已退出'))
               }
             }
           }, () => {})
@@ -364,7 +371,7 @@ return {
       const id = ++cmdSeq
       return new Promise((resolve, reject) => {
         if (handle === null) {
-          reject(new Error('内置浏览器未运行'))
+          reject(new Error('浏览器未运行'))
           return
         }
         waiters.set(id, { resolve: resolve, reject: reject })
@@ -386,8 +393,8 @@ return {
       if (!/^https?:\/\//i.test(url)) return { ok: false, error: '网址需以 http:// 或 https:// 开头' }
       try {
         await ensureHelper()
-        // 首次使用 npx 需下载 Electron（约 1-3 分钟），放宽超时
-        const r = await request('open', { url: url }, 240000)
+        // 首次使用需安装 playwright-core 运行时 + 探测系统浏览器（约 10-30 秒），放宽超时
+        const r = await request('open', { url: url }, 120000)
         return (r && r.ok)
           ? { ok: true, status: Object.assign({ state: 'open' }, r.status || { url: url }) }
           : { ok: false, error: (r && r.error) || '打开失败' }
@@ -455,9 +462,9 @@ return {
     const el = React.createElement
 
     styles.insert(
-      '.dsh-pe-icon-btn { background: transparent; border: none; color: #9a9aa6; padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }' +
-      '.dsh-pe-icon-btn:hover { background: rgba(255,255,255,0.08); color: #d8d8e0; }' +
-      '.dsh-pe-icon-btn:disabled { opacity: 0.5; cursor: default; }'
+      '.dsh-we-icon-btn { background: transparent; border: none; color: #9a9aa6; padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }' +
+      '.dsh-we-icon-btn:hover { background: rgba(255,255,255,0.08); color: #d8d8e0; }' +
+      '.dsh-we-icon-btn:disabled { opacity: 0.5; cursor: default; }'
     )
 
     const shortText = (s) => {
@@ -607,14 +614,15 @@ return {
         }
       }
 
+      const browserLabel = status && status.browser ? '浏览器: ' + status.browser + ' · ' : ''
       const tooltip = status
         ? (status.message ||
             (status.state === 'open'
-              ? '已打开: ' + (status.title || status.url || '') +
+              ? browserLabel + '已打开: ' + (status.title || status.url || '') +
                 (status.modeExited ? ' · 选择模式已退出（点击图标可重新打开）' : (status.injected ? ' · 已注入选择功能' : ''))
               : ''))
         : ''
-      const buttonTitle = tooltip || '打开内置浏览器并选择页面元素'
+      const buttonTitle = tooltip || '打开浏览器并选择页面元素'
 
       const renderDialog = () => el('div', {
         style: S.backdrop,
@@ -635,13 +643,13 @@ return {
             }),
             status ? el('div', { style: S.statusLine },
               '状态：' + (status.message ||
-                (status.state === 'open' ? '已打开 ' + (status.url || '') +
+                (status.state === 'open' ? browserLabel + '已打开 ' + (status.url || '') +
                   (status.modeExited ? ' · 选择模式已退出' : (status.injected ? ' · 已注入选择功能' : '')) :
                   status.state === 'ready' ? '浏览器已就绪' : status.state))
             ) : null,
             notice ? el('div', { style: S.notice }, notice) : null,
             el('div', { style: S.hint },
-              '提示：页面中点击元素后点「添加到对话」即可在输入框中插入 [标签][DOMn] 引用式占位符；完整元素信息由模型按需通过 read_picked_element 工具读取。首次使用会自动通过 npx 下载内置浏览器（约 1-3 分钟，仅一次）。登录页面时先点击页面右下角「选择模式」暂停，登录完成后回到这里再次点击「打开」，即可重新打开页面并注入选择功能。'
+              '提示：页面中点击元素后点「添加到对话」即可在输入框中插入 [标签][DOMn] 引用式占位符；完整元素信息由模型按需通过 read_picked_element 工具读取。浏览器使用系统已安装的 Chrome/Edge 等（自动探测，绝不下载），首次打开需安装约 13MB 运行时并探测浏览器，之后秒开。登录页面时先点击页面右下角「选择模式」暂停，登录完成后回到这里再次点击「打开」，即可重新打开页面并注入选择功能。'
             ),
           ),
           el('div', { style: S.footer },
@@ -654,7 +662,7 @@ return {
 
       return el(React.Fragment, null,
         el('button', {
-          className: 'dsh-pe-icon-btn',
+          className: 'dsh-we-icon-btn',
           onClick: () => { setOpen(true); setNotice('') },
           title: buttonTitle,
           'aria-label': '添加页面元素',
@@ -666,7 +674,7 @@ return {
     }
 
     slots.inject('conversation.input.left', () => slots.register(
-      { name: 'conversation.input.left', id: 'dsh-page-element-picker', order: 0 },
+      { name: 'conversation.input.left', id: 'dsh-webpage-element-picker', order: 0 },
       (props) => el(PickerEntry, props),
     ))
   },
@@ -674,4 +682,4 @@ return {
 Client 代码结束
 ---- 复制到这里结束 ----
 
-完成标准：输入框工具行出现十字图标；图标 tooltip 显示「打开内置浏览器并选择页面元素」。
+完成标准：输入框工具行出现十字图标；图标 tooltip 显示「打开浏览器并选择页面元素」。

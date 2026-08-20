@@ -25,8 +25,9 @@ return {
     const waiters = new Map()
     let lastSeq = 0
     let pending = []
-    let status = { state: 'idle', message: '内置浏览器未启动' }
+    let status = { state: 'idle', message: '浏览器未启动' }
     let lineBuf = ''
+    let lastBrowserName = ''
 
     let domCounter = 0
     let domRegistry = []
@@ -69,25 +70,30 @@ return {
       const dirs = []
       const home = await discoverHome()
       if (home) {
-        dirs.push(home + '/.dsh/_dsh-page-picker')
-        dirs.push(home + '/.dph/_dsh-page-picker')
+        dirs.push(home + '/.dsh/_dsh-webpage-element-picker')
+        dirs.push(home + '/.dph/_dsh-webpage-element-picker')
       }
-      dirs.push(workspaceRoot + '/_dsh-page-picker')
+      dirs.push(workspaceRoot + '/_dsh-webpage-element-picker')
       return dirs
     }
 
     const resolveResourceDir = async () => {
       const fs = ctx.get('fs')
       if (fs === undefined) throw new Error('fs 服务不可用')
+      const needFiles = ['bootstrap.cjs', 'helper-playwright.js', 'inspector.js', 'browser-probe.cjs']
       const candidates = await resourceDirCandidates()
       for (const c of candidates) {
-        try {
-          const target = await fs.resolve(c + '/bootstrap.cjs')
-          const info = await fs.stat(target)
-          if (info) return c
-        } catch (err) {}
+        let ok = true
+        for (const name of needFiles) {
+          try {
+            const target = await fs.resolve(c + '/' + name)
+            const info = await fs.stat(target)
+            if (!info) { ok = false; break }
+          } catch (err) { ok = false; break }
+        }
+        if (ok) return c
       }
-      throw new Error('未找到页面元素选择器的资源目录（已尝试: ' + candidates.join(' | ') + '）')
+      throw new Error('未找到页面元素选择器的资源目录（需要 4 个文件: ' + needFiles.join(' / ') + '；已尝试: ' + candidates.join(' | ') + '）')
     }
 
     const loadResources = async (resourceDir) => {
@@ -98,7 +104,7 @@ return {
         return await fs.readText(target)
       }
       return {
-        helper: await readFile('helper-main.js'),
+        helper: await readFile('helper-playwright.js'),
         inspector: await readFile('inspector.js'),
       }
     }
@@ -133,7 +139,7 @@ return {
     if (systemPrompt) {
       try {
         ctx.effect(() => systemPrompt.context({
-          name: 'page-element-picker',
+          name: 'webpage-element-picker',
           order: 60,
           text: () => buildSummary(),
         }))
@@ -186,11 +192,12 @@ return {
         if (pending.length > 100) pending = pending.slice(-100)
         return
       }
-      if (ev.type === 'status') { status = { state: 'open', url: ev.url, title: ev.title }; return }
-      if (ev.type === 'injected') { status = { state: 'open', url: ev.url, title: ev.title, injected: true }; return }
-      if (ev.type === 'mode-exited') { status = { state: 'open', url: ev.url, title: ev.title, modeExited: true }; return }
+      if (ev.type === 'browser') { lastBrowserName = ev.name || '浏览器'; status = { state: 'starting', message: '正在启动 ' + lastBrowserName + '…', browser: lastBrowserName }; return }
+      if (ev.type === 'status') { status = { state: 'open', url: ev.url, title: ev.title, browser: lastBrowserName }; return }
+      if (ev.type === 'injected') { status = { state: 'open', url: ev.url, title: ev.title, injected: true, browser: lastBrowserName }; return }
+      if (ev.type === 'mode-exited') { status = { state: 'open', url: ev.url, title: ev.title, modeExited: true, browser: lastBrowserName }; return }
       if (ev.type === 'window-closed') { status = { state: 'closed', message: '浏览器窗口已关闭，可重新点击打开按钮打开' }; return }
-      if (ev.type === 'helper-ready') { status = { state: 'ready', message: '内置浏览器已就绪' }; return }
+      if (ev.type === 'helper-ready') { status = { state: 'ready', message: '浏览器已就绪' + (lastBrowserName ? '（' + lastBrowserName + '）' : ''), browser: lastBrowserName }; return }
       if (ev.type === 'error') {
         console.error('[page-picker] 浏览器错误: ' + ev.message)
         status = { state: 'error', message: ev.message }
@@ -203,7 +210,7 @@ return {
       try {
         disposers.push(webServer.register({
           kind: 'exact',
-          path: '/dsh-page-picker/poll',
+          path: '/dsh-webpage-element-picker/poll',
           handler: (req, res) => {
             if (commandQueue.length > 0) {
               const cmd = commandQueue.shift()
@@ -233,7 +240,7 @@ return {
         }))
         disposers.push(webServer.register({
           kind: 'exact',
-          path: '/dsh-page-picker/events',
+          path: '/dsh-webpage-element-picker/events',
           handler: (req, res) => {
             let body = ''
             let overflow = false
@@ -305,15 +312,15 @@ return {
           const res = await loadResources(resourceDir)
           const payloadText = res.helper + '\n<<<DSH_SPLIT>>>\n' + res.inspector + '\n<<<DSH_END>>>\n'
           const node = await subprocess.resolveExecutable('node')
-          // npx 启动 Electron（首次自动下载到自有缓存，之后秒开）；
-          // 使用 npx-cli.js 脚本入口而不是 npx.cmd，避免 Windows 下 spawn .cmd 的限制
-          const npxCli = node.replace(/[^\\/]+$/, 'node_modules/npm/bin/npx-cli.js')
+          // npm 安装 playwright-core 运行时（首次数秒，无浏览器下载）后启动系统浏览器；
+          // 使用 npm-cli.js 脚本入口而不是 npm.cmd，避免 Windows 下 spawn .cmd 的限制
+          const npmCli = node.replace(/[^\\/]+$/, 'node_modules/npm/bin/npm-cli.js')
           let launcher = null
           try {
-            await subprocess.resolveExecutable(npxCli)
-            launcher = npxCli
+            await subprocess.resolveExecutable(npmCli)
+            launcher = npmCli
           } catch (err) {}
-          if (!launcher) throw new Error('未找到 npm 的 npx 脚本入口（' + npxCli + '），请确认 Node.js 安装完整')
+          if (!launcher) throw new Error('未找到 npm 的脚本入口（' + npmCli + '），请确认 Node.js 安装完整')
           const port = (typeof webServer.port === 'number' && webServer.port > 0) ? webServer.port : 0
           if (port === 0) throw new Error('DSH web 服务器端口不可用')
           const boot = subprocess.spawn({
@@ -329,10 +336,10 @@ return {
             if (handle === boot) {
               handle = null
               const tail = stderrTail(boot)
-              status = { state: 'closed', message: '内置浏览器进程已退出 (code ' + outcome.exitCode + ')' + (tail ? ' · ' + tail : '') }
+              status = { state: 'closed', message: '浏览器进程已退出 (code ' + outcome.exitCode + ')' + (tail ? ' · ' + tail : '') }
               for (const [id, w] of Array.from(waiters)) {
                 waiters.delete(id)
-                w.reject(new Error('内置浏览器进程已退出'))
+                w.reject(new Error('浏览器进程已退出'))
               }
             }
           }, () => {})
@@ -352,7 +359,7 @@ return {
       const id = ++cmdSeq
       return new Promise((resolve, reject) => {
         if (handle === null) {
-          reject(new Error('内置浏览器未运行'))
+          reject(new Error('浏览器未运行'))
           return
         }
         waiters.set(id, { resolve: resolve, reject: reject })
@@ -374,8 +381,8 @@ return {
       if (!/^https?:\/\//i.test(url)) return { ok: false, error: '网址需以 http:// 或 https:// 开头' }
       try {
         await ensureHelper()
-        // 首次使用 npx 需下载 Electron（约 1-3 分钟），放宽超时
-        const r = await request('open', { url: url }, 240000)
+        // 首次使用需安装 playwright-core 运行时 + 探测系统浏览器（约 10-30 秒），放宽超时
+        const r = await request('open', { url: url }, 120000)
         return (r && r.ok)
           ? { ok: true, status: Object.assign({ state: 'open' }, r.status || { url: url }) }
           : { ok: false, error: (r && r.error) || '打开失败' }

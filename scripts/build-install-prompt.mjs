@@ -10,10 +10,10 @@ const client = readFileSync(join(root, 'plugin', 'client.js'), 'utf8').trimEnd()
 const md = [
   '# 安装指令（粘贴给 DSH 会话的 agent）',
   '',
-  '前置：把本仓库 `resources/` 下的三个文件（bootstrap.cjs、helper-main.js、inspector.js）放到以下任意一个目录（插件按顺序查找，命中即用）：',
-  '  1. `~/.dsh/_dsh-page-picker/`（DSH 家目录，默认）',
-  '  2. `~/.dph/_dsh-page-picker/`',
-  '  3. `<DSH 工作区>/_dsh-page-picker/`（兜底）',
+  '前置：把本仓库 `resources/` 下的四个文件（bootstrap.cjs、helper-playwright.js、inspector.js、browser-probe.cjs）放到以下任意一个目录（插件按顺序查找，命中即用；browser-probe.cjs 负责探测系统已安装浏览器，绝不下载）：',
+  '  1. `~/.dsh/_dsh-webpage-element-picker/`（DSH 家目录，默认）',
+  '  2. `~/.dph/_dsh-webpage-element-picker/`',
+  '  3. `<DSH 工作区>/_dsh-webpage-element-picker/`（兜底）',
   '',
   '然后在 DSH 网页 GUI 中新建一个 `cordis` 预设的会话，把下面整段内容发给 agent：',
   '',
@@ -27,7 +27,7 @@ const md = [
   'Client 代码结束',
   '---- 复制到这里结束 ----',
   '',
-  '完成标准：输入框工具行出现十字图标；图标 tooltip 显示「打开内置浏览器并选择页面元素」。',
+  '完成标准：输入框工具行出现十字图标；图标 tooltip 显示「打开浏览器并选择页面元素」。',
 ].join('\n')
 
 writeFileSync(join(root, 'install-prompt.md'), md + '\n')

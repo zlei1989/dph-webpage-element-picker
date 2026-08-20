@@ -1,26 +1,26 @@
 (function () {
   'use strict'
-  if (window.__dsh_pe_active__) return
-  window.__dsh_pe_active__ = true
+  if (window.__dsh_we_active__) return
+  window.__dsh_we_active__ = true
 
   function setStyle(el, s) { for (var k in s) el.style[k] = s[k] }
 
   /* ---- hover overlay ---- */
   var ov = document.createElement('div')
-  ov.setAttribute('data-dsh-pe', 'ov')
+  ov.setAttribute('data-dsh-we', 'ov')
   setStyle(ov, { position: 'fixed', pointerEvents: 'none', zIndex: '2147483640', border: '2px solid #3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: '3px', display: 'none' })
 
   /* ---- hover label ---- */
   var lb = document.createElement('div')
-  lb.setAttribute('data-dsh-pe', 'lb')
+  lb.setAttribute('data-dsh-we', 'lb')
   setStyle(lb, { position: 'fixed', pointerEvents: 'none', zIndex: '2147483640', backgroundColor: '#3b82f6', color: '#fff', fontSize: '11px', fontFamily: 'monospace', padding: '2px 6px', borderRadius: '3px', whiteSpace: 'nowrap', display: 'none' })
 
   /* ---- action bar ---- */
   var ab = document.createElement('div')
-  ab.setAttribute('data-dsh-pe', 'ab')
+  ab.setAttribute('data-dsh-we', 'ab')
   setStyle(ab, { position: 'fixed', zIndex: '2147483642', background: '#1e1e1e', borderRadius: '6px', display: 'none', flexDirection: 'row', alignItems: 'center', gap: '4px', padding: '4px 6px', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' })
   var btnAdd = document.createElement('button')
-  btnAdd.setAttribute('data-dsh-pe-add', '1')
+  btnAdd.setAttribute('data-dsh-we-add', '1')
   setStyle(btnAdd, { background: '#2d2d2d', color: '#fff', fontSize: '12px', border: 'none', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', whiteSpace: 'nowrap' })
   btnAdd.textContent = '添加到对话'
   var btnCancel = document.createElement('button')
@@ -31,7 +31,7 @@
 
   /* ---- pause/resume chip ---- */
   var chip = document.createElement('div')
-  chip.setAttribute('data-dsh-pe', 'chip')
+  chip.setAttribute('data-dsh-we', 'chip')
   setStyle(chip, { position: 'fixed', bottom: '16px', right: '16px', zIndex: '2147483642', background: '#1e1e1e', color: '#fff', fontSize: '12px', fontFamily: 'system-ui,sans-serif', borderRadius: '16px', padding: '5px 12px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', userSelect: 'none' })
   chip.textContent = '⌖ 选择模式：开启（点击暂停，或按 `）'
   chip.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); togglePause() })
@@ -129,11 +129,11 @@
   }
 
   function sendData(data) {
-    console.log('__DSH_PE__:' + JSON.stringify(data))
+    console.log('__DSH_WE__:' + JSON.stringify(data))
   }
 
   function isOurEl(el) {
-    return !!(el && el.closest && el.closest('[data-dsh-pe]'))
+    return !!(el && el.closest && el.closest('[data-dsh-we]'))
   }
 
   /* ---- UI helpers ---- */
@@ -292,8 +292,8 @@
 
   /* ---- first-run toast ---- */
   try {
-    if (!sessionStorage.getItem('__dsh_pe_hint__')) {
-      sessionStorage.setItem('__dsh_pe_hint__', '1')
+    if (!sessionStorage.getItem('__dsh_we_hint__')) {
+      sessionStorage.setItem('__dsh_we_hint__', '1')
       var th = document.createElement('div')
       setStyle(th, { position: 'fixed', bottom: '64px', left: '50%', transform: 'translateX(-50%)', zIndex: '2147483643', background: 'rgba(30,30,30,0.92)', color: '#fff', fontSize: '12px', fontFamily: 'system-ui,sans-serif', padding: '7px 16px', borderRadius: '20px', pointerEvents: 'none', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(0,0,0,0.45)', transition: 'opacity 0.4s' })
       th.textContent = '🔍 页面元素选择已开启 · 点击元素后点「添加到对话」 · 按 ` 暂停'
@@ -321,7 +321,7 @@
   }
 
   /* ---- cleanup ---- */
-  window.__dsh_pe_test_state__ = function () { return state }
+  window.__dsh_we_test_state__ = function () { return state }
   function cleanupAll() {
     document.removeEventListener('mousemove', onMM, true)
     document.removeEventListener('pointerdown', onPD, true)
@@ -335,9 +335,9 @@
       if (els[i].parentNode) els[i].parentNode.removeChild(els[i])
     }
     document.documentElement.style.cursor = ''
-    delete window.__dsh_pe_active__
-    delete window.__dsh_pe_cleanup__
-    delete window.__dsh_pe_test_state__
+    delete window.__dsh_we_active__
+    delete window.__dsh_we_cleanup__
+    delete window.__dsh_we_test_state__
   }
-  window.__dsh_pe_cleanup__ = cleanupAll
+  window.__dsh_we_cleanup__ = cleanupAll
 })()

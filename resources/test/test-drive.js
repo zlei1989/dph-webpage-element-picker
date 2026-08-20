@@ -15,8 +15,8 @@ setTimeout(function () {
 }, 2500)
 var tries = 0
 var iv = setInterval(function () {
-  var b = document.querySelector('[data-dsh-pe-add]')
-  var selected = window.__dsh_pe_test_state__ && window.__dsh_pe_test_state__() === 'selected'
+  var b = document.querySelector('[data-dsh-we-add]')
+  var selected = window.__dsh_we_test_state__ && window.__dsh_we_test_state__() === 'selected'
   if (b && selected) { console.log('DRIVE-CLICK-ADD'); b.click(); clearInterval(iv); return }
-  if (++tries > 60) { console.log('DRIVE-GAVE-UP selected=' + String(window.__dsh_pe_test_state__ && window.__dsh_pe_test_state__())); clearInterval(iv) }
+  if (++tries > 60) { console.log('DRIVE-GAVE-UP selected=' + String(window.__dsh_we_test_state__ && window.__dsh_we_test_state__())); clearInterval(iv) }
 }, 250)

@@ -6,12 +6,12 @@ const path = require('path')
 
 const here = __dirname
 const root = path.join(here, '..')
-const npxCli = process.argv[2]
+const npmCli = process.argv[2]
 const out = { events: [], errors: [], exitCode: null }
 const log = (m) => { console.log('[driver] ' + m) }
 
 const payload =
-  fs.readFileSync(path.join(root, 'helper-main.js'), 'utf8') +
+  fs.readFileSync(path.join(root, 'helper-playwright.js'), 'utf8') +
   '\n<<<DSH_SPLIT>>>\n' +
   fs.readFileSync(path.join(root, 'inspector.js'), 'utf8') +
   '\n<<<DSH_END>>>\n'
@@ -22,7 +22,7 @@ const pollWaiters = []
 
 const server = http.createServer((req, res) => {
   const pathname = (req.url || '').split('?')[0]
-  if (pathname === '/dsh-page-picker/poll') {
+  if (pathname === '/dsh-webpage-element-picker/poll') {
     if (pendingCommands.length > 0) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(pendingCommands.shift()))
@@ -44,7 +44,7 @@ const server = http.createServer((req, res) => {
     req.on('close', () => finish(null))
     return
   }
-  if (pathname === '/dsh-page-picker/events') {
+  if (pathname === '/dsh-webpage-element-picker/events') {
     let body = ''
     req.on('data', (d) => { body += String(d) })
     req.on('end', () => {
@@ -95,8 +95,8 @@ function sendCommand(cmd) {
 server.listen(0, '127.0.0.1', () => {
   const port = server.address().port
   log('mock DSH server on 127.0.0.1:' + port)
-  log('spawning bootstrap with npx-cli: ' + npxCli)
-  const child = spawn(process.execPath, [path.join(root, 'bootstrap.cjs'), npxCli, String(port)], {
+  log('spawning bootstrap with npm-cli: ' + npmCli)
+  const child = spawn(process.execPath, [path.join(root, 'bootstrap.cjs'), npmCli, String(port)], {
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   let buf = ''

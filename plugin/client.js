@@ -6,9 +6,9 @@ return {
     const el = React.createElement
 
     styles.insert(
-      '.dsh-pe-icon-btn { background: transparent; border: none; color: #9a9aa6; padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }' +
-      '.dsh-pe-icon-btn:hover { background: rgba(255,255,255,0.08); color: #d8d8e0; }' +
-      '.dsh-pe-icon-btn:disabled { opacity: 0.5; cursor: default; }'
+      '.dsh-we-icon-btn { background: transparent; border: none; color: #9a9aa6; padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }' +
+      '.dsh-we-icon-btn:hover { background: rgba(255,255,255,0.08); color: #d8d8e0; }' +
+      '.dsh-we-icon-btn:disabled { opacity: 0.5; cursor: default; }'
     )
 
     const shortText = (s) => {
@@ -158,14 +158,15 @@ return {
         }
       }
 
+      const browserLabel = status && status.browser ? '浏览器: ' + status.browser + ' · ' : ''
       const tooltip = status
         ? (status.message ||
             (status.state === 'open'
-              ? '已打开: ' + (status.title || status.url || '') +
+              ? browserLabel + '已打开: ' + (status.title || status.url || '') +
                 (status.modeExited ? ' · 选择模式已退出（点击图标可重新打开）' : (status.injected ? ' · 已注入选择功能' : ''))
               : ''))
         : ''
-      const buttonTitle = tooltip || '打开内置浏览器并选择页面元素'
+      const buttonTitle = tooltip || '打开浏览器并选择页面元素'
 
       const renderDialog = () => el('div', {
         style: S.backdrop,
@@ -186,13 +187,13 @@ return {
             }),
             status ? el('div', { style: S.statusLine },
               '状态：' + (status.message ||
-                (status.state === 'open' ? '已打开 ' + (status.url || '') +
+                (status.state === 'open' ? browserLabel + '已打开 ' + (status.url || '') +
                   (status.modeExited ? ' · 选择模式已退出' : (status.injected ? ' · 已注入选择功能' : '')) :
                   status.state === 'ready' ? '浏览器已就绪' : status.state))
             ) : null,
             notice ? el('div', { style: S.notice }, notice) : null,
             el('div', { style: S.hint },
-              '提示：页面中点击元素后点「添加到对话」即可在输入框中插入 [标签][DOMn] 引用式占位符；完整元素信息由模型按需通过 read_picked_element 工具读取。首次使用会自动通过 npx 下载内置浏览器（约 1-3 分钟，仅一次）。登录页面时先点击页面右下角「选择模式」暂停，登录完成后回到这里再次点击「打开」，即可重新打开页面并注入选择功能。'
+              '提示：页面中点击元素后点「添加到对话」即可在输入框中插入 [标签][DOMn] 引用式占位符；完整元素信息由模型按需通过 read_picked_element 工具读取。浏览器使用系统已安装的 Chrome/Edge 等（自动探测，绝不下载），首次打开需安装约 13MB 运行时并探测浏览器，之后秒开。登录页面时先点击页面右下角「选择模式」暂停，登录完成后回到这里再次点击「打开」，即可重新打开页面并注入选择功能。'
             ),
           ),
           el('div', { style: S.footer },
@@ -205,7 +206,7 @@ return {
 
       return el(React.Fragment, null,
         el('button', {
-          className: 'dsh-pe-icon-btn',
+          className: 'dsh-we-icon-btn',
           onClick: () => { setOpen(true); setNotice('') },
           title: buttonTitle,
           'aria-label': '添加页面元素',
@@ -217,7 +218,7 @@ return {
     }
 
     slots.inject('conversation.input.left', () => slots.register(
-      { name: 'conversation.input.left', id: 'dsh-page-element-picker', order: 0 },
+      { name: 'conversation.input.left', id: 'dsh-webpage-element-picker', order: 0 },
       (props) => el(PickerEntry, props),
     ))
   },

@@ -1,6 +1,9 @@
 $ErrorActionPreference = 'SilentlyContinue'
-$ids = (Get-Process electron | Select-Object -ExpandProperty Id)
-if (-not $ids) { Write-Output 'NO-ELECTRON-PROCESS'; exit }
+# Only count browser processes started by this plugin (command line contains dsh-webpage-element-picker).
+# Keep this file ASCII-only: Windows PowerShell 5.1 reads BOM-less files as ANSI.
+$procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe' OR Name='brave.exe' OR Name='opera.exe' OR Name='chromium.exe'" | Where-Object { $_.CommandLine -match 'dsh-webpage-element-picker' }
+$ids = @($procs | Select-Object -ExpandProperty ProcessId)
+if ($ids.Count -eq 0) { Write-Output 'NO-PICKER-BROWSER-PROCESS'; exit }
 Add-Type @"
 using System;
 using System.Text;
