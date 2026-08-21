@@ -1,4 +1,9 @@
 'use strict'
+// 冒烟测试驱动：模拟 DSH host 插件侧（/poll 长轮询 + /events 捕获），
+// 拉起真实 bootstrap.cjs 走完整链路——helper-ready 后自动打开 test-page.html
+// （CSP 测试页），经 test-drive.js 模拟用户点选元素，再依次验证窗口可见性
+// （check-windows.ps1）、status/reinject 命令，18s 后落盘 result.json 并杀树。
+// 用法: node driver.cjs <npm-cli.js 路径>；整体 300s 安全兜底，永不挂起。
 const { spawn, execSync } = require('child_process')
 const http = require('http')
 const fs = require('fs')

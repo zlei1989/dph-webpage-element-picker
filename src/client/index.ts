@@ -12,6 +12,9 @@
  * 包裹在 web boot 握手中（`window.__ModuleLoader__.load({id, factory})`）。
  * 它通过 harness webserver 的 /dsh-webpage-element-picker/invoke 路由
  * （同源 fetch）与 host 半边通信。
+ *
+ * 日志：DEBUG 级走 console.debug——浏览器 DevTools 默认级别下不可见，
+ * 等价于生产默认关闭；INFO/ERROR 直接输出。
  */
 
 import { React, h } from './react'
@@ -21,14 +24,39 @@ import type { InvokeResult, PendingElement, PickerStatus } from '../shared/types
 const PLUGIN_ID = 'dsh-webpage-element-picker'
 const INVOKE_PATH = '/dsh-webpage-element-picker/invoke'
 
+/** 日志统一前缀（DevTools 控制台检索用）。 */
+const LOG_PREFIX = '[dsh-webpage-element-picker]'
+
+/** DEBUG：分支走向、中间变量（console.debug，DevTools 默认级别不可见）。 */
+function logDebug(msg: string): void {
+  console.debug(LOG_PREFIX + ' [DEBUG] ' + msg)
+}
+/** INFO：请求入口、关键状态变更、外部调用耗时 >500ms。 */
+function logInfo(msg: string): void {
+  console.info(LOG_PREFIX + ' [INFO] ' + msg)
+}
+/** ERROR：业务异常、外部调用失败——带堆栈和业务上下文。 */
+function logError(msg: string, err?: unknown): void {
+  const e = err as Error | null | undefined
+  const detail = e && e.stack ? e.stack : String((e && e.message) || err || '')
+  console.error(LOG_PREFIX + ' [ERROR] ' + msg + (detail ? '\n' + detail : ''))
+}
+
 const STYLE_CSS =
   '.dsh-we-icon-btn { background: transparent; border: none; color: #9a9aa6; padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }' +
   '.dsh-we-icon-btn:hover { background: rgba(255,255,255,0.08); color: #d8d8e0; }' +
   '.dsh-we-icon-btn:disabled { opacity: 0.5; cursor: default; }'
 
-/** 调用 host 半边的 picker-* 处理器（POST 到 harness webserver 路由）。 */
+/**
+ * 调用 host 半边的 picker-* 处理器（POST 到 harness webserver 路由）。
+ * 日志：DEBUG 记录方法与参数；耗时 >500ms 记 INFO（首次安装运行时/
+ * 冷启动系统浏览器会显著变慢）；失败抛给调用方的 catch 统一处理。
+ */
 function hostCall(method: string, params?: Record<string, unknown>): Promise<InvokeResult> {
+  // 同源调用：web shell 与插件 API 同 origin，空 base 兜底非浏览器环境
   const base = typeof window !== 'undefined' && window.location && window.location.origin ? window.location.origin : ''
+  const startedAt = Date.now()
+  logDebug('host 调用: ' + method + ' 参数: ' + JSON.stringify(params || {}))
   return fetch(base + INVOKE_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -36,15 +64,25 @@ function hostCall(method: string, params?: Record<string, unknown>): Promise<Inv
   }).then((res) => {
     if (!res.ok) throw new Error('HTTP ' + res.status)
     return res.json() as Promise<InvokeResult>
+  }).then((value) => {
+    const cost = Date.now() - startedAt
+    if (cost > 500) logInfo('host 调用 ' + method + ' 耗时 ' + cost + 'ms')
+    return value
   })
 }
 
+/** 折叠所有空白为单空格并截断为最长 10 字，用作占位符里的短标签。 */
 function shortText(s: unknown): string {
   const t = String(s || '').replace(/\s+/g, ' ').trim()
   if (!t) return ''
   return t.length > 10 ? t.slice(0, 10) + '…' : t
 }
 
+/**
+ * 生成元素的人类可读标签，按优先级回退：
+ * 可见文本 → aria-label/placeholder/alt/title/value 语义属性 →
+ * tag#id → tag.class（前两个类名）→ 裸 tag。
+ */
 function labelOf(p: Record<string, unknown>): string {
   if (p.textContent) return shortText(p.textContent)
   const attrs = (p.attributes || {}) as Record<string, string>
@@ -59,6 +97,10 @@ function labelOf(p: Record<string, unknown>): string {
   return tag
 }
 
+/**
+ * 生成插入输入框的 `[标签][DOMn]` 引用式占位符；
+ * 无可用标签时退化为裸 `[DOMn]`。
+ */
 function placeholderLine(item: PendingElement): string {
   const p = (item.payload || {}) as Record<string, unknown>
   const id = item.domId || 'DOM'
@@ -83,6 +125,7 @@ const S: Record<string, React.CSSProperties> = {
   primaryBtn: { background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 16px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' },
 }
 
+/** 十字准星 SVG 图标（输入框左侧槽位按钮的内容）。 */
 function crosshairIcon(el: typeof h): React.ReactNode {
   return el(
     'svg',
@@ -98,9 +141,16 @@ function crosshairIcon(el: typeof h): React.ReactNode {
   )
 }
 
+/**
+ * 槽位组件主体：十字图标按钮 + 「添加页面元素」对话框。
+ * 对话框负责网址输入与状态展示；轮询 host 拉取新选中元素并插入草稿。
+ */
 function PickerEntry(props: PickerEntryProps): React.ReactNode {
   const el = h
+  // 读取宿主输入框草稿（useInput 是槽位标准 props；缺失时退化为空草稿兜底）
   const input = props.useInput ? props.useInput(function (s) { return s }) : { draft: '' }
+  // st 用 state[0] 对象做可变引用：轮询闭包内需要读到最新的 draft/afterSeq，
+  // 又不能让轮询 effect 依赖 draft（会导致每次打字都退订重订）
   const st = React.useState(function () { return { afterSeq: 0, draft: '' } })[0]
   st.draft = input.draft
 
@@ -121,6 +171,7 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
   const setNotice = noticeState[1]
   const statusState = status ? status.state : null
 
+  /** 显示一条通知，5 秒后自动清除（仅当内容未被后续通知覆盖时）。 */
   const showNotice = function (text: string): void {
     setNotice(text)
     window.setTimeout(function () {
@@ -128,6 +179,10 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
     }, 5000)
   }
 
+  /**
+   * 把新选中的元素追加为输入框草稿里的占位符行，
+   * 并推进轮询游标 afterSeq（游标语义保证同一元素不重复插入）。
+   */
   const insertElements = function (elements: PendingElement[]): void {
     let draft = st.draft
     for (const item of elements) {
@@ -137,9 +192,14 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
       props.inputActions.setDraft(draft)
     }
     st.draft = draft
-    if (elements.length) st.afterSeq = elements[elements.length - 1].seq
+    if (elements.length) {
+      st.afterSeq = elements[elements.length - 1].seq
+      logDebug('已插入 ' + elements.length + ' 个占位符: ' + elements.map(function (e) { return e.domId }).join(', '))
+    }
   }
 
+  // 轮询 host 的 picker-pull：对话框打开期间或浏览器处于 open 状态时，
+  // 每 1.5s 拉取一次新选中元素与最新状态
   React.useEffect(function () {
     if (!open && statusState !== 'open') return
     let cancelled = false
@@ -154,8 +214,9 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
             if (open) showNotice('已添加 ' + elements.length + ' 个页面元素到输入框')
           }
         })
-        .catch(function () {
-          // 内置浏览器尚未就绪，继续轮询
+        .catch(function (err) {
+          // 内置浏览器尚未就绪时 host 会拒绝请求——属预期，静默继续轮询
+          logDebug('picker-pull 失败（浏览器未就绪），继续轮询: ' + String((err && err.message) || err))
         })
     }
     poll()
@@ -166,16 +227,20 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
     }
   }, [open, statusState])
 
+  /** 事件处理「打开」：取第一行网址 → 协议校验 → 调 picker-navigate。 */
   const onConfirm = function (): void {
+    // 多行输入只取第一个非空行（提示文案已说明"每行一个，使用第一行"）
     const url = String(urlText || '').split('\n').map(function (s) { return s.trim() }).filter(Boolean)[0] || ''
     if (!url) {
       showNotice('请先输入网址')
       return
     }
     if (!/^https?:\/\//i.test(url)) {
+      logDebug('网址校验未通过（需 http/https）: ' + url)
       showNotice('网址需以 http:// 或 https:// 开头')
       return
     }
+    logInfo('用户请求打开网址: ' + url)
     setBusy(true)
     hostCall('picker-navigate', { url: url })
       .then(function (res) {
@@ -187,6 +252,7 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
         }
       })
       .catch(function (err) {
+        logError('打开网址失败: ' + url, err)
         showNotice('打开失败：' + String((err && err.message) || err))
       })
       .finally(function () {
@@ -194,7 +260,9 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
       })
   }
 
+  /** 事件处理「仅重新注入」：不重新导航，在当前页面恢复选择功能（登录后场景）。 */
   const onReinject = function (): void {
+    logInfo('用户请求重新注入选择功能')
     setBusy(true)
     hostCall('picker-reinject', {})
       .then(function (res) {
@@ -206,6 +274,7 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
         }
       })
       .catch(function (err) {
+        logError('重新注入失败', err)
         showNotice('重新注入失败：' + String((err && err.message) || err))
       })
       .finally(function () {
@@ -213,6 +282,7 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
       })
   }
 
+  // 图标按钮悬浮提示：优先 host 状态消息，否则按 open 状态组装摘要
   const browserLabel = status && status.browser ? '浏览器: ' + status.browser + ' · ' : ''
   const tooltip = status
     ? status.message ||
@@ -223,6 +293,7 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
     : ''
   const buttonTitle = tooltip || '打开浏览器并选择页面元素'
 
+  /** 渲染「添加页面元素」对话框（点击 backdrop 空白处关闭）。 */
   const renderDialog = function (): React.ReactNode {
     return el(
       'div',
@@ -305,6 +376,10 @@ function PickerEntry(props: PickerEntryProps): React.ReactNode {
   )
 }
 
+/**
+ * 插件入口：注入图标按钮样式 + 注册 conversation.input.left 槽位组件；
+ * 均经 ctx.effect 登记清理器，插件卸载时自动移除。
+ */
 function apply(ctx: ClientCtx): void {
   ctx.effect(function () {
     let tag: HTMLStyleElement | null = null
@@ -331,8 +406,12 @@ function apply(ctx: ClientCtx): void {
       )
     })
   }, 'dsh-webpage-element-picker: slot registration')
+
+  logInfo('client 插件已加载（槽位 conversation.input.left）')
 }
 
+// loader 契约：bundle 外层包裹（tsup banner）提供局部 module/exports，
+// 这里导出插件表面供 window.__ModuleLoader__ 读取
 module.exports = {
   name: PLUGIN_ID,
   inject: ['slots'],

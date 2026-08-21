@@ -1,4 +1,8 @@
 'use strict'
+// 冒烟测试页面脚本（由 test-page.html 引用）：模拟用户操作——
+// 延时向 #target 派发 pointerdown 触发 inspector 选中，然后轮询等待
+// 「添加到对话」按钮出现并点击，全程用 DRIVE-* 控制台输出标记进度
+// （driver.cjs 经 helper 的 console 桥/页面事件间接验证选择链路）。
 console.log('DRIVE-START')
 // 模拟用户选择 #target，然后点击注入的「添加到对话」按钮
 setTimeout(function () {
